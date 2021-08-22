@@ -8,6 +8,7 @@ const jwt = require("jsonwebtoken");
 
 const { verifyAccessToken, verifyRefreshToken } = require("./middleware/auth");
 const redis_client = require("./redis");
+const { generateRefreshToken } = require("./service/auth/token");
 
 const prisma = new PrismaClient();
 
@@ -32,18 +33,8 @@ app.post("/signup", async (req, res) => {
     });
     const userData = { id: user.id, name: user.name, email: user.email };
     const token = jwt.sign(userData, process.env.JWT_SECRET, { expiresIn: 30 });
-    const refreshToken = jwt.sign(userData, process.env.JWT_SECRET, {
-      expiresIn: 60 * 60 * 24 * 7,
-    }); // 7days
 
-    redis_client.get(user.id.toString(), (err, data) => {
-      if (err) throw err;
-
-      redis_client.set(
-        user.id.toString(),
-        JSON.stringify({ token: refreshToken })
-      );
-    });
+    const refreshToken = generateRefreshToken(userData);
 
     res.send({ token, refreshToken, user: userData });
   } catch (error) {
@@ -55,23 +46,30 @@ app.get("/login", (req, res) => {
   res.send("Login");
 });
 
+app.get("/logout", verifyAccessToken, async (req, res) => {
+  try {
+    const user = req.user;
+    console.log("user", user);
+
+    // delete refresh token
+    await redis_client.del(user.id, (err) => {
+      if (err) throw err;
+    });
+
+    // invalidate access token
+    await redis_client.set("INVALIDATED_" + user.id, user.token);
+
+    res.send({ status: "logged out" });
+  } catch (error) {
+    res.status(500).send(error);
+  }
+});
+
 app.post("/refresh-access-token", verifyRefreshToken, (req, res) => {
   const user = req.user;
   const userData = { id: user.id, name: user.name, email: user.email };
   const token = jwt.sign(userData, process.env.JWT_SECRET, { expiresIn: 30 });
-  const refreshToken = jwt.sign(userData, process.env.JWT_SECRET, {
-    expiresIn: 60 * 60 * 24 * 7,
-  }); // 7days
-
-  redis_client.get(user.id.toString(), (err, data) => {
-    if (err) throw err;
-
-    redis_client.set(
-      user.id.toString(),
-      JSON.stringify({ token: refreshToken })
-    );
-  });
-
+  const refreshToken = generateRefreshToken(userData);
   res.send({ token, refreshToken });
 });
 
@@ -80,6 +78,7 @@ app.get("/restricted", verifyAccessToken, (req, res) => {
 });
 
 app.get("/current-user", verifyAccessToken, (req, res) => {
+  console.log("/current user");
   res.send(req.user);
 });
 

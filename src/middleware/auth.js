@@ -3,12 +3,24 @@ const redisClient = require("../redis");
 
 const verifyAccessToken = (req, res, next) => {
   try {
-    const user = jwt.verify(req.headers.authorization, process.env.JWT_SECRET);
-    req.user = user;
+    const accessToken = req.headers.authorization;
+    const user = jwt.verify(accessToken, process.env.JWT_SECRET);
+
+    redisClient.get("INVALIDATED_" + accessToken, (err, data) => {
+      if (err) throw err;
+      // token is invalidated
+      if (data === accessToken)
+        res.status(401).send({ message: "Invalid auth" });
+    });
+
+    req.user = { ...user, token: req.headers.authorization };
     next();
   } catch (error) {
+    console.log("error", error);
     if (error.message === "jwt expired") {
       res.json({ message: "Access token has expired" });
+    } else {
+      res.status(401).json({ message: "Un-auth request" });
     }
   }
 };
