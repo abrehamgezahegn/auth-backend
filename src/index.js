@@ -22,8 +22,8 @@ app.get("/", (req, res) => {
 
 app.post("/signup", async (req, res) => {
   try {
-    var salt = bcrypt.genSaltSync(10);
-    var hash = bcrypt.hashSync(req.body.password, salt);
+    const salt = bcrypt.genSaltSync(10);
+    const hash = bcrypt.hashSync(req.body.password, salt);
     const user = await prisma.user.create({
       data: {
         name: req.body.name,
@@ -42,8 +42,28 @@ app.post("/signup", async (req, res) => {
   }
 });
 
-app.get("/login", (req, res) => {
-  res.send("Login");
+app.post("/login", async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: {
+        email: req.body.email,
+      },
+    });
+    if (!user) res.status(401).send("Invalid username or password");
+    const result = bcrypt.compareSync(req.body.password, user.password);
+    if (result) {
+      const userData = { id: user.id, name: user.name, email: user.email };
+      const token = jwt.sign(userData, process.env.JWT_SECRET, {
+        expiresIn: 30,
+      });
+
+      const refreshToken = generateRefreshToken(userData);
+
+      res.send({ token, refreshToken, user: userData });
+    } else res.status(401).send({ error: "Invalid username or password" });
+  } catch (error) {
+    res.status(500).send({ error });
+  }
 });
 
 app.get("/logout", verifyAccessToken, async (req, res) => {
@@ -61,16 +81,21 @@ app.get("/logout", verifyAccessToken, async (req, res) => {
 
     res.send({ status: "logged out" });
   } catch (error) {
-    res.status(500).send(error);
+    res.status(500).send({ error });
   }
 });
 
 app.post("/refresh-access-token", verifyRefreshToken, (req, res) => {
-  const user = req.user;
-  const userData = { id: user.id, name: user.name, email: user.email };
-  const token = jwt.sign(userData, process.env.JWT_SECRET, { expiresIn: 30 });
-  const refreshToken = generateRefreshToken(userData);
-  res.send({ token, refreshToken });
+  console.log("refreshing access token");
+  try {
+    const user = req.user;
+    const userData = { id: user.id, name: user.name, email: user.email };
+    const token = jwt.sign(userData, process.env.JWT_SECRET, { expiresIn: 30 });
+    const refreshToken = generateRefreshToken(userData);
+    res.send({ token, refreshToken });
+  } catch (error) {
+    res.status(401).send(error);
+  }
 });
 
 app.get("/restricted", verifyAccessToken, (req, res) => {

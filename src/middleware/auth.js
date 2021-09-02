@@ -31,11 +31,19 @@ const verifyRefreshToken = (req, res, next) => {
     if (!refreshToken) return res.status(401).send("Invalid request");
     const user = jwt.verify(refreshToken, process.env.JWT_SECRET);
     redisClient.get(user.id.toString(), (err, data) => {
+      // check for any error
       if (err) throw err;
+
+      // check if no RT is found under the user
       if (data === null) return res.status(401).send("RT not found");
+
+      // check if the RT is not old / replaced
       if (JSON.parse(data).token !== refreshToken.toString()) {
+        redisClient.del(user.id.toString());
         return res.status(401).send("Invalid request. RT not matching");
       }
+
+      // must be the real user
       req.user = user;
       next();
     });
