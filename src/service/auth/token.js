@@ -1,8 +1,6 @@
 const redis_client = require("../../redis");
 const jwt = require("jsonwebtoken");
 
-const generateAccessToken = () => {};
-
 const generateRefreshToken = (userData) => {
   const refreshToken = jwt.sign(userData, process.env.JWT_SECRET, {
     expiresIn: 60 * 60 * 24 * 7,
@@ -22,5 +20,4 @@ const generateRefreshToken = (userData) => {
 
 module.exports = {
   generateRefreshToken,
-  generateAccessToken,
 };

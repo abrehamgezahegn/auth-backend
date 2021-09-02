@@ -17,3 +17,10 @@ model User {
   name  String
   password String
 }
+
+model Activity {
+  id Int  @default(autoincrement()) @id
+  type String
+  email String
+  description String
+}

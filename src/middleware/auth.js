@@ -10,7 +10,7 @@ const verifyAccessToken = (req, res, next) => {
       if (err) throw err;
       // token is invalidated
       if (data === accessToken)
-        res.status(401).send({ message: "Invalid auth" });
+        return res.status(401).send({ message: "Invalid auth" });
     });
 
     req.user = { ...user, token: req.headers.authorization };
@@ -18,9 +18,9 @@ const verifyAccessToken = (req, res, next) => {
   } catch (error) {
     console.log("error", error);
     if (error.message === "jwt expired") {
-      res.json({ message: "Access token has expired" });
+      return res.json({ message: "Access token has expired" });
     } else {
-      res.status(401).json({ message: "Un-auth request" });
+      return res.status(401).json({ message: "Un-auth request" });
     }
   }
 };

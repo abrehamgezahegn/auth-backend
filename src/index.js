@@ -36,8 +36,23 @@ app.post("/signup", async (req, res) => {
 
     const refreshToken = generateRefreshToken(userData);
 
+    await prisma.activity.create({
+      data: {
+        description: `User with email ${user.email} signed up`,
+        email: user.email,
+        type: "Sign up",
+      },
+    });
+
     res.send({ token, refreshToken, user: userData });
   } catch (error) {
+    await prisma.activity.create({
+      data: {
+        description: `User with email: ${req.body.email} failed to sign up`,
+        email: req.body.email,
+        type: "Sign up fail",
+      },
+    });
     res.status(500).send(error);
   }
 });
@@ -49,7 +64,16 @@ app.post("/login", async (req, res) => {
         email: req.body.email,
       },
     });
-    if (!user) res.status(401).send("Invalid username or password");
+    if (!user) {
+      await prisma.activity.create({
+        data: {
+          description: `User with email: ${req.body.email} failed to login`,
+          email: req.body.email,
+          type: "Login password fail",
+        },
+      });
+      return res.status(401).send("Invalid username or password");
+    }
     const result = bcrypt.compareSync(req.body.password, user.password);
     if (result) {
       const userData = { id: user.id, name: user.name, email: user.email };
@@ -59,17 +83,33 @@ app.post("/login", async (req, res) => {
 
       const refreshToken = generateRefreshToken(userData);
 
+      await prisma.activity.create({
+        data: {
+          description: `User with email: ${req.body.email} logged in`,
+          email: req.body.email,
+          type: "Login",
+        },
+      });
+
       res.send({ token, refreshToken, user: userData });
-    } else res.status(401).send({ error: "Invalid username or password" });
+    } else {
+      await prisma.activity.create({
+        data: {
+          description: `User with email: ${req.body.email} failed to login`,
+          email: req.body.email,
+          type: "Login password fail",
+        },
+      });
+      return res.status(401).send({ error: "Invalid username or password" });
+    }
   } catch (error) {
     res.status(500).send({ error });
   }
 });
 
-app.get("/logout", verifyAccessToken, async (req, res) => {
+app.post("/logout", async (req, res) => {
   try {
-    const user = req.user;
-    console.log("user", user);
+    const user = req.body;
 
     // delete refresh token
     await redis_client.del(user.id, (err) => {
@@ -79,8 +119,16 @@ app.get("/logout", verifyAccessToken, async (req, res) => {
     // invalidate access token
     await redis_client.set("INVALIDATED_" + user.id, user.token);
 
-    res.send({ status: "logged out" });
+    await prisma.activity.create({
+      data: {
+        description: `User with email: ${req.body.email} logged out`,
+        email: req.body.email,
+        type: "Logout",
+      },
+    });
+    return res.send({ status: "logged out" });
   } catch (error) {
+    console.log("logout error", error);
     res.status(500).send({ error });
   }
 });
